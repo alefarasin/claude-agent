@@ -1,50 +1,50 @@
 # Claude Agent 🤖
 
-Bot Telegram che esegue istruzioni in linguaggio naturale sul tuo repository usando Claude Code CLI.
+Telegram bot that executes natural language instructions on your repository using the Claude Code CLI.
 
-## Setup rapido
+## Quick Setup
 
-### 1. Clona il repo
+### 1. Clone the repo
 ```bash
-git clone https://github.com/TUO-USERNAME/claude-agent.git
+git clone https://github.com/YOUR-USERNAME/claude-agent.git
 cd claude-agent
 ```
 
-### 2. Configura le variabili d'ambiente
+### 2. Configure environment variables
 ```bash
 cp .env.example .env
-# Modifica .env con i tuoi valori
+# Edit .env with your values
 ```
 
-### 3. Lancia con Docker
+### 3. Launch with Docker
 ```bash
 docker compose up -d
 ```
 
-## Comandi Telegram
+## Telegram Commands
 
-| Comando | Descrizione |
+| Command | Description |
 |---|---|
-| `/start` | Avvia il bot |
-| `/status` | Stato del workspace |
-| `/log` | Ultimi 5 commit |
-| `/help` | Guida rapida |
+| `/start` | Start the bot |
+| `/status` | Workspace status |
+| `/log` | Last 5 commits |
+| `/help` | Quick guide |
 
-Oppure invia qualsiasi istruzione in linguaggio naturale:
-- `Crea una funzione fibonacci con i test`
-- `Fai il refactoring di main.py`
-- `Aggiungi la documentazione a tutte le funzioni`
+Or send any natural language instruction:
+- `Create a fibonacci function with tests`
+- `Refactor main.py`
+- `Add documentation to all functions`
 
-## Requisiti
+## Requirements
 
 - Docker + Docker Compose
-- Account Anthropic (piano Pro o API key)
-- Bot Telegram (via @BotFather)
+- Anthropic account (Pro plan or API key)
+- Telegram bot (via @BotFather)
 - GitHub Personal Access Token
 
-## Portabilità
+## Portability
 
-Il container gira identico su:
-- Laptop (Mac/Linux/Windows con Docker Desktop)
-- VPS (Hetzner, DigitalOcean, ecc.)
-- Qualsiasi macchina con Docker installato
+The container runs identically on:
+- Laptop (Mac/Linux/Windows with Docker Desktop)
+- VPS (Hetzner, DigitalOcean, etc.)
+- Any machine with Docker installed
