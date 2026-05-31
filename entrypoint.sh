@@ -11,6 +11,14 @@ git config --global credential.helper store
 # Salva credenziali git
 echo "https://${GITHUB_USERNAME}:${GITHUB_TOKEN}@github.com" > ~/.git-credentials
 
+# Verifica che il token OAuth sia presente
+if [ -z "${CLAUDE_CODE_OAUTH_TOKEN}" ]; then
+    echo "❌ CLAUDE_CODE_OAUTH_TOKEN non impostato."
+    echo "   Generalo con: docker compose run --rm claude-agent claude setup-token"
+    echo "   Poi incollalo nel file .env"
+    exit 1
+fi
+
 echo "✅ Configurazione completata"
 echo "🤖 Avvio bot Telegram..."
 
