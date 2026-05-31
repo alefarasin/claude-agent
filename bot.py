@@ -17,7 +17,7 @@ load_dotenv()
 # Configurazione
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ALLOWED_CHAT_ID = int(os.getenv("TELEGRAM_CHAT_ID"))
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+CLAUDE_CODE_OAUTH_TOKEN = os.getenv("CLAUDE_CODE_OAUTH_TOKEN")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_USERNAME = os.getenv("GITHUB_USERNAME")
 REPO_NAME = os.getenv("REPO_NAME", "claude-agent")
@@ -56,7 +56,10 @@ def setup_workspace() -> bool:
 async def run_claude_code(instruction: str) -> str:
     """Esegue Claude Code con l'istruzione ricevuta."""
     env = os.environ.copy()
-    env["ANTHROPIC_API_KEY"] = ANTHROPIC_API_KEY
+    # Usa il token OAuth dell'abbonamento (NON la API key)
+    env["CLAUDE_CODE_OAUTH_TOKEN"] = CLAUDE_CODE_OAUTH_TOKEN
+    # Rimuovi eventuale API key per evitare che abbia precedenza
+    env.pop("ANTHROPIC_API_KEY", None)
 
     try:
         process = await asyncio.create_subprocess_exec(
@@ -195,8 +198,8 @@ def main():
     """Avvia il bot."""
     if not TELEGRAM_BOT_TOKEN:
         raise ValueError("TELEGRAM_BOT_TOKEN non configurato")
-    if not ANTHROPIC_API_KEY:
-        raise ValueError("ANTHROPIC_API_KEY non configurato")
+    if not CLAUDE_CODE_OAUTH_TOKEN:
+        raise ValueError("CLAUDE_CODE_OAUTH_TOKEN non configurato")
     if not GITHUB_TOKEN:
         raise ValueError("GITHUB_TOKEN non configurato")
 
