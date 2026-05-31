@@ -18,7 +18,9 @@ RUN npm install -g @anthropic-ai/claude-code
 
 # Utente non-root
 RUN useradd -m -s /bin/bash claude && \
-    echo "claude ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+    echo "claude ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
+    mkdir -p /home/claude/workspace && \
+    chown claude:claude /home/claude/workspace
 
 USER claude
 WORKDIR /home/claude
