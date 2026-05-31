@@ -1,0 +1,12 @@
+services:
+  claude-agent:
+    build: .
+    container_name: claude-agent
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - workspace:/home/claude/workspace
+
+volumes:
+  workspace:
