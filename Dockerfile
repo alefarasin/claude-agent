@@ -1,6 +1,11 @@
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV POETRY_NO_INTERACTION=1
+ENV POETRY_VIRTUALENVS_IN_PROJECT=true
+ENV POETRY_HOME=/opt/poetry
+ENV PATH="$POETRY_HOME/bin:$PATH"
 
 # Dipendenze base
 RUN apt-get update && apt-get install -y \
@@ -16,6 +21,9 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
 
+# Poetry
+RUN curl -sSL https://install.python-poetry.org | python3 -
+
 # Utente non-root
 RUN useradd -m -s /bin/bash claude && \
     echo "claude ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
@@ -25,15 +33,12 @@ RUN useradd -m -s /bin/bash claude && \
 USER claude
 WORKDIR /home/claude
 
-# Python virtualenv e dipendenze bot
-RUN python3 -m venv /home/claude/venv
-COPY --chown=claude:claude requirements.txt .
-RUN /home/claude/venv/bin/pip install --upgrade pip && \
-    /home/claude/venv/bin/pip install -r requirements.txt
+# Layer 1: dipendenze (cached finché pyproject.toml/poetry.lock non cambiano)
+COPY --chown=claude:claude pyproject.toml poetry.lock ./
+RUN poetry install --only main --no-root
 
-# Copia il bot
-COPY --chown=claude:claude bot.py .
-COPY --chown=claude:claude entrypoint.sh .
-RUN chmod +x entrypoint.sh
+# Layer 2: sorgenti + installazione del progetto (registra lo script claude-agent)
+COPY --chown=claude:claude . .
+RUN poetry install --only main && chmod +x entrypoint.sh
 
 ENTRYPOINT ["./entrypoint.sh"]

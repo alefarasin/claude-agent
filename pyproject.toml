@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "claude-agent"
+version = "0.1.0"
+description = "Telegram bot that executes natural language instructions via Claude Code CLI"
+authors = ["Alessandro Farasin <alessandro.farasin@gmail.com>"]
+readme = "README.md"
+packages = [
+    {include = "bot.py"},
+    {include = "config.py"},
+    {include = "agent"},
+    {include = "handlers"},
+]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+python-telegram-bot = "^20.7"
+python-dotenv = "^1.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+pytest-asyncio = "^0.23"
+
+[tool.poetry.scripts]
+claude-agent = "bot:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

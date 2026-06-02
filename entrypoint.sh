@@ -22,5 +22,4 @@ fi
 echo "✅ Configurazione completata"
 echo "🤖 Avvio bot Telegram..."
 
-# Avvia il bot
-exec /home/claude/venv/bin/python bot.py
+exec poetry run claude-agent

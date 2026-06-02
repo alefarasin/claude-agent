@@ -10,13 +10,23 @@ Claude Agent is a Telegram bot that receives natural language instructions and e
 
 ```
 claude-agent/
-├── bot.py              # Telegram bot — task queue, history, Claude execution
-├── entrypoint.sh       # Container init: git credentials, OAuth token check
-├── Dockerfile          # Ubuntu 24.04 + Node.js 20 + Claude Code CLI + Python venv
-├── docker-compose.yml  # Single service, named volume for workspace persistence
-├── requirements.txt    # python-telegram-bot, python-dotenv
-├── .env.example        # Environment variable template
-└── CLAUDE.md           # Claude Code project guidance (references this file)
+├── bot.py                  # Entry point: builds Application, registers handlers
+├── config.py               # Config dataclass — all env vars validated at startup
+├── agent/
+│   ├── executor.py         # run_raw(), run() — Claude subprocess execution
+│   ├── history.py          # Conversation history store + compaction
+│   ├── queue.py            # AgentTask, chat_worker, heartbeat, enqueue/cancel
+│   └── workspace.py        # setup(), pull() — git workspace management
+├── handlers/
+│   ├── commands.py         # /start /status /log /tasks /cancel /reset /help
+│   └── messages.py         # handle() — incoming text messages
+├── pyproject.toml          # Poetry dependencies and scripts
+├── poetry.lock             # Locked dependency tree (always committed)
+├── entrypoint.sh           # Container init: git credentials, OAuth token check
+├── Dockerfile              # Ubuntu 24.04 + Node.js 20 + Claude Code + Poetry
+├── docker-compose.yml      # Single service, named volume for workspace persistence
+├── .env.example            # Environment variable template
+└── CLAUDE.md               # Claude Code project guidance (references this file)
 ```
 
 ## Architecture
@@ -25,24 +35,26 @@ claude-agent/
 Telegram user
      │  natural language instruction
      ▼
-bot.py — handle_message()
-     │  enqueue_task() + ensure_worker()
+handlers/messages.py — handle()
+     │  agent/queue.enqueue() + ensure_worker()
      ▼
-chat_worker()  ─── asyncio background task, one per active chat
+agent/queue._worker()  ── asyncio background task, one per active chat
      │
-     ├── setup_workspace()     clone / pull GitHub repo into ~/workspace/<REPO_NAME>
-     ├── compact_history_if_needed()   summarise old turns via claude --print
-     ├── _heartbeat()          sends "still running" every 60s
-     └── run_claude_code()
-              │
-              └── _run_claude()   subprocess: claude --print --dangerously-skip-permissions
+     ├── agent/workspace.setup()     clone / pull GitHub repo into ~/workspace/<REPO_NAME>
+     ├── agent/history.compact_if_needed()   summarise old turns via claude --print
+     ├── agent/queue._heartbeat()    sends "still running" every 60s
+     └── agent/executor.run()
+              │  prepends conversation context to instruction
+              └── agent/executor.run_raw()
+                       └── subprocess: claude --print --dangerously-skip-permissions
 ```
 
 Key design decisions:
 - **No hard timeout** on tasks — long-running operations are supported; use `/cancel` to abort.
-- **Sequential execution per chat** — tasks from the same chat run one at a time to avoid race conditions on the workspace.
+- **Sequential execution per chat** — tasks from the same chat run one at a time to avoid workspace race conditions.
 - **In-memory state** — history and task queue are not persisted; a container restart clears them.
-- **Single workspace per bot instance** — `WORKSPACE_DIR = ~/workspace/<REPO_NAME>` is shared across all tasks.
+- **Config injected via `bot_data`** — `context.bot_data["cfg"]` carries the `Config` instance into every handler, avoiding global state.
+- **`gitpython` not used** — all git operations go through `subprocess` directly.
 
 ## Environment variables
 
@@ -72,17 +84,25 @@ docker compose logs -f
 docker compose down -v
 ```
 
+### Updating dependencies (requires Poetry on host)
+
+```bash
+poetry add <package>       # add a dependency
+poetry update              # update all
+# always commit pyproject.toml and poetry.lock together
+```
+
 ## Telegram commands
 
 | Command | Handler | Description |
 |---|---|---|
-| `/start` | `start()` | Welcome message |
-| `/status` | `status()` | Git status of the workspace |
-| `/log` | `log()` | Last 5 commits |
-| `/tasks` | `tasks_cmd()` | Running task (elapsed time) + pending queue |
-| `/cancel` | `cancel_cmd()` | Cancel running task and clear queue |
-| `/reset` | `reset()` | Clear conversation history |
-| `/help` | `help_command()` | Usage guide |
+| `/start` | `commands.start` | Welcome message |
+| `/status` | `commands.status` | Git status of the workspace |
+| `/log` | `commands.log` | Last 5 commits |
+| `/tasks` | `commands.tasks` | Running task (elapsed time) + pending queue |
+| `/cancel` | `commands.cancel` | Cancel running task and clear queue |
+| `/reset` | `commands.reset` | Clear conversation history |
+| `/help` | `commands.help_cmd` | Usage guide |
 
 ## Agent guidelines
 
@@ -90,19 +110,28 @@ When Claude Code operates inside this repository via the bot:
 
 - **Commit all changes** after completing a task. Use concise, descriptive commit messages.
 - **Never modify `.env`** — credentials must not be touched or logged.
-- **Work inside `WORKSPACE_DIR`** (`~/workspace/<REPO_NAME>`). Do not write outside this directory.
+- **Work inside `cfg.workspace_dir`** (`~/workspace/<REPO_NAME>`). Do not write outside this directory.
 - **Prefer editing existing files** over creating new ones unless the task explicitly requires new files.
 - **Run tests if present** before committing. If no test suite exists, verify the change manually where possible.
 - **Keep commits atomic** — one logical change per commit.
 
 ## History and compaction
 
-Conversation history is stored in `conversation_history: dict[int, list[dict]]` keyed by `chat_id`. Each entry has `role` (`user`, `assistant`, or `system`) and `content`.
+Conversation history is stored in `agent/history._store: dict[int, list[dict]]` keyed by `chat_id`. Each entry has `role` (`user`, `assistant`, or `system`) and `content`.
 
-When `len(history) > MAX_HISTORY_LEN` (default 20), `compact_history_if_needed()` summarises the oldest `N - HISTORY_KEEP_RECENT` messages via `claude --print` and replaces them with a single `system` summary message. The most recent `HISTORY_KEEP_RECENT` (default 6) messages are always kept verbatim.
+When `len(history) > cfg.max_history_len` (default 20), `compact_if_needed()` summarises the oldest messages via `executor.run_raw()` and replaces them with a single `system` summary. The most recent `cfg.history_keep_recent` (default 6) messages are always kept verbatim.
+
+## Task lifecycle
+
+```
+PENDING → RUNNING → DONE
+                 ↘ CANCELLED
+```
+
+Each `AgentTask` is created by `queue.enqueue()` and processed by `queue._worker()`. Cancellation triggers `asyncio.Task.cancel()` on the worker, which propagates `CancelledError` into `executor.run_raw()`, where the claude subprocess is killed via `process.kill()`.
 
 ## Constraints
 
-- Only one chat ID is authorised (`ALLOWED_CHAT_ID`). All other senders are silently ignored.
-- The subprocess running `claude` is killed via `process.kill()` when a task is cancelled (`CancelledError`).
-- The heartbeat interval is `HEARTBEAT_INTERVAL = 60` seconds and is configurable at module level.
+- Only one chat ID is authorised (`cfg.allowed_chat_id`). All other senders are silently ignored.
+- The heartbeat interval is `cfg.heartbeat_interval` (default 60s), configurable via `Config`.
+- `poetry.lock` must always be committed alongside `pyproject.toml` to guarantee reproducible Docker builds.

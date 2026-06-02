@@ -17,6 +17,7 @@ Tasks run in the background with no hard timeout — use `/cancel` to abort. Cla
 - Claude Pro account (OAuth token — **not** an API key)
 - Telegram bot token (via [@BotFather](https://t.me/BotFather))
 - GitHub Personal Access Token with `repo` scope
+- [Poetry](https://python-poetry.org) (only needed on the host to update dependencies)
 
 ## Setup
 
@@ -66,6 +67,18 @@ To rebuild after code changes:
 docker compose up -d --build
 ```
 
+### Updating dependencies
+
+```bash
+# Add a package
+poetry add <package>
+
+# Update all packages
+poetry update
+
+# Always commit pyproject.toml and poetry.lock together
+```
+
 ## Telegram Commands
 
 | Command | Description |
@@ -94,3 +107,21 @@ The container runs identically on:
 - Laptop (Mac / Linux / Windows with Docker Desktop)
 - VPS (Hetzner, DigitalOcean, etc.)
 - Any machine with Docker installed
+
+## Notes for WSL2 users
+
+On WSL2 (Ubuntu 24.04), use `docker compose` (the V2 plugin) instead of `docker-compose` (the legacy Python tool). The legacy version 1.29.2 is incompatible with recent Docker Engine versions and will produce `ContainerConfig` or `KeyError: 'id'` errors.
+
+Install the plugin if not already available:
+
+```bash
+sudo apt-get install docker-compose-v2
+```
+
+Verify the installation:
+
+```bash
+docker compose version
+```
+
+All commands in this guide use `docker compose` (with a space).
