@@ -2,7 +2,7 @@
 name = "claude-agent"
 version = "0.1.0"
 description = "Telegram bot that executes natural language instructions via Claude Code CLI"
-authors = ["Alessandro Farasin <alessandro.farasin@gmail.com>"]
+authors = ["Alessandro Farasin"]
 readme = "README.md"
 packages = [
     {include = "bot.py"},
