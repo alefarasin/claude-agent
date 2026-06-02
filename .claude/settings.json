@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(poetry --version)",
+      "Bash(which poetry *)",
+      "Read(//home/explo/.local/share/pypoetry/venv/bin/**)"
+    ]
+  }
+}

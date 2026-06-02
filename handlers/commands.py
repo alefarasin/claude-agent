@@ -6,6 +6,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from agent import queue as q
 from agent import history
+from agent import mode as agent_mode
 
 
 def authorized(update: Update, allowed_chat_id: int) -> bool:
@@ -25,6 +26,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/tasks — task in coda o in esecuzione\n"
         "/cancel — annulla il task corrente e svuota la coda\n"
         "/reset — resetta la sessione corrente\n"
+        "/mode — cambia modello (claude / ollama)\n"
         "/help — guida rapida"
     )
 
@@ -96,6 +98,25 @@ async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("🔄 Sessione resettata. Puoi iniziare un nuovo argomento.")
 
 
+async def mode_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    cfg = context.bot_data["cfg"]
+    if not authorized(update, cfg.allowed_chat_id):
+        return
+    chat_id = update.effective_chat.id
+    args = context.args
+    if not args:
+        current = agent_mode.get(chat_id)
+        await update.message.reply_text(f"Modalità corrente: *{current}*", parse_mode="Markdown")
+        return
+    new_mode = args[0].lower()
+    if new_mode not in (agent_mode.CLAUDE, agent_mode.OLLAMA):
+        await update.message.reply_text("Modalità valide: `claude`, `ollama`", parse_mode="Markdown")
+        return
+    agent_mode.set(chat_id, new_mode)
+    label = "☁️ Claude Code" if new_mode == agent_mode.CLAUDE else f"🦙 Ollama ({cfg.ollama_model})"
+    await update.message.reply_text(f"✅ Modalità impostata: *{label}*", parse_mode="Markdown")
+
+
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     cfg = context.bot_data["cfg"]
     if not authorized(update, cfg.allowed_chat_id):
@@ -110,6 +131,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Puoi inviare più istruzioni: vengono eseguite in sequenza.\n\n"
         "/tasks — vedi cosa è in coda\n"
         "/cancel — annulla il task corrente e svuota la coda\n"
-        "/reset — nuova sessione su argomento diverso",
+        "/reset — nuova sessione su argomento diverso\n"
+        "/mode — modalità corrente; `/mode claude` o `/mode ollama` per cambiare",
         parse_mode="Markdown",
     )

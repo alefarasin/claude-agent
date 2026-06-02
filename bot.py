@@ -22,6 +22,7 @@ def main() -> None:
     app.add_handler(CommandHandler("tasks", commands.tasks))
     app.add_handler(CommandHandler("cancel", commands.cancel))
     app.add_handler(CommandHandler("reset", commands.reset))
+    app.add_handler(CommandHandler("mode", commands.mode_cmd))
     app.add_handler(CommandHandler("help", commands.help_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, messages.handle))
 

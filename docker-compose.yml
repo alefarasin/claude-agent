@@ -1,4 +1,23 @@
 services:
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      - ollama_models:/root/.ollama
+    ports:
+      - "11435:11434"
+
   claude-agent:
     build: .
     container_name: claude-agent
@@ -7,6 +26,9 @@ services:
       - .env
     volumes:
       - workspace:/home/claude/workspace
+    depends_on:
+      - ollama
 
 volumes:
   workspace:
+  ollama_models:

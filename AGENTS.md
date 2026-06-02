@@ -55,6 +55,7 @@ Key design decisions:
 - **In-memory state** — history and task queue are not persisted; a container restart clears them.
 - **Config injected via `bot_data`** — `context.bot_data["cfg"]` carries the `Config` instance into every handler, avoiding global state.
 - **`gitpython` not used** — all git operations go through `subprocess` directly.
+- **Ollama fallback** — when `OLLAMA_FALLBACK=true` and Claude exits with a non-zero code, `executor.run_raw()` retries via the Ollama HTTP API (`/api/chat`). Ollama runs as a sidecar container (`ollama/ollama`) with GPU passthrough.
 
 ## Environment variables
 
@@ -66,6 +67,9 @@ Key design decisions:
 | `GITHUB_TOKEN` | ✅ | Personal Access Token with `repo` scope |
 | `GITHUB_USERNAME` | ✅ | GitHub username used to clone the repo |
 | `REPO_NAME` | ❌ | Repository to work on (default: `claude-agent`) |
+| `OLLAMA_FALLBACK` | ❌ | Set `true` to fall back to Ollama when Claude fails (default: `false`) |
+| `OLLAMA_MODEL` | ❌ | Ollama model name (default: `qwen2.5-coder:14b`) |
+| `OLLAMA_URL` | ❌ | Ollama API base URL (default: `http://ollama:11434`) |
 
 ## Build and run
 
@@ -102,6 +106,7 @@ poetry update              # update all
 | `/tasks` | `commands.tasks` | Running task (elapsed time) + pending queue |
 | `/cancel` | `commands.cancel` | Cancel running task and clear queue |
 | `/reset` | `commands.reset` | Clear conversation history |
+| `/mode` | `commands.mode_cmd` | Show current model; `/mode claude` or `/mode ollama` to switch |
 | `/help` | `commands.help_cmd` | Usage guide |
 
 ## Agent guidelines

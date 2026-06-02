@@ -17,6 +17,9 @@ class Config:
     max_history_len: int = 20
     history_keep_recent: int = 6
     heartbeat_interval: int = 60  # seconds
+    ollama_url: str = "http://ollama:11434"
+    ollama_model: str = "qwen2.5-coder:14b"
+    ollama_fallback: bool = False
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -36,4 +39,7 @@ class Config:
             github_username=os.environ["GITHUB_USERNAME"],
             repo_name=repo_name,
             workspace_dir=os.path.expanduser(f"~/workspace/{repo_name}"),
+            ollama_url=os.getenv("OLLAMA_URL", "http://ollama:11434"),
+            ollama_model=os.getenv("OLLAMA_MODEL", "qwen2.5-coder:14b"),
+            ollama_fallback=os.getenv("OLLAMA_FALLBACK", "false").lower() == "true",
         )
