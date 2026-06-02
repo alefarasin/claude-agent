@@ -9,7 +9,7 @@ Telegram bot that receives natural language instructions and executes them on a 
 3. Claude Code executes the instruction autonomously
 4. Output is returned via Telegram (truncated at 3800 chars if needed)
 
-Tasks have a 5-minute timeout. Claude Code runs with `--dangerously-skip-permissions` so it can operate fully autonomously inside the container.
+Tasks run in the background with no hard timeout — use `/cancel` to abort. Claude Code runs with `--dangerously-skip-permissions` so it can operate fully autonomously inside the container. Multiple instructions can be sent at once: they are queued and executed sequentially. Every 60 seconds a heartbeat message confirms the task is still running.
 
 ## Requirements
 
@@ -73,6 +73,9 @@ docker compose up -d --build
 | `/start` | Start the bot and show welcome message |
 | `/status` | Current workspace branch and pending changes |
 | `/log` | Last 5 commits |
+| `/tasks` | Show running task (with elapsed time) and pending queue |
+| `/cancel` | Cancel the running task and clear the queue |
+| `/reset` | Clear conversation history and start a new session |
 | `/help` | Usage guide with examples |
 
 Or send any natural language instruction directly:
@@ -81,6 +84,8 @@ Or send any natural language instruction directly:
 - `Refactor main.py using dataclasses`
 - `Add error handling to utils.py`
 - `Write documentation for all functions`
+
+You can send multiple instructions without waiting — they are queued and run one after another. Use `/tasks` to monitor progress and `/cancel` to abort.
 
 ## Portability
 
