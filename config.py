@@ -14,8 +14,6 @@ class Config:
     github_username: str
     repo_name: str
     workspace_dir: str
-    max_history_len: int = 20
-    history_keep_recent: int = 6
     heartbeat_interval: int = 60  # seconds
 
     @classmethod

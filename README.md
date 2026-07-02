@@ -6,8 +6,10 @@ Telegram bot that receives natural language instructions and executes them on a 
 
 1. You send a message to your Telegram bot
 2. The bot clones (or updates) the target repository inside the container
-3. Claude Code executes the instruction autonomously
-4. Output is returned via Telegram (truncated at 3800 chars if needed)
+3. Claude Code executes the instruction with full conversation context
+4. The response is returned via Telegram (truncated at 3800 chars if needed)
+
+Conversation context is accumulated in a `context.md` file on the persistent volume and prepended to every Claude Code invocation, so Claude remembers the full session. Use `/compact` to ask Claude to condense the accumulated context, and `/reset` to start fresh.
 
 Tasks run in the background with no hard timeout — use `/cancel` to abort. Claude Code runs with `--dangerously-skip-permissions` so it can operate fully autonomously inside the container. Multiple instructions can be sent at once: they are queued and executed sequentially. Every 60 seconds a heartbeat message confirms the task is still running.
 
@@ -89,7 +91,8 @@ poetry update
 | `/tasks` | Show running task (with elapsed time) and pending queue |
 | `/cancel` | Cancel the running task and clear the entire queue |
 | `/cancel <id>` | Remove a specific task from the queue (use the ID shown by `/tasks`) |
-| `/reset` | Clear conversation history and start a new session |
+| `/compact` | Ask Claude to condense the accumulated conversation context |
+| `/reset` | Clear the conversation context and start a new session |
 | `/help` | Usage guide with examples |
 
 Or send any natural language instruction directly:

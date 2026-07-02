@@ -19,18 +19,4 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info(f"Istruzione ricevuta: {instruction}")
 
     task = q.enqueue(chat_id, instruction)
-    busy = q.is_busy(chat_id)
-
-    if busy:
-        pos = len(q.task_queues.get(chat_id, []))
-        await update.message.reply_text(
-            f"⏳ Task #{task.id} in coda (posizione {pos}).\n_{instruction[:80]}_",
-            parse_mode="Markdown",
-        )
-    else:
-        await update.message.reply_text(
-            f"🚀 Task #{task.id} ricevuto.\n_{instruction[:80]}_",
-            parse_mode="Markdown",
-        )
-
     q.ensure_worker(chat_id, context.bot, cfg)

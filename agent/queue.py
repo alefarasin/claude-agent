@@ -92,7 +92,7 @@ async def _heartbeat(chat_id: int, task: AgentTask, bot, interval: int) -> None:
 
 
 async def _worker(chat_id: int, bot, cfg: Config) -> None:
-    from agent import executor, history, workspace
+    from agent import executor, workspace
 
     try:
         while True:
@@ -106,25 +106,18 @@ async def _worker(chat_id: int, bot, cfg: Config) -> None:
             running_tasks[chat_id] = task
 
             try:
-                await bot.send_message(
-                    chat_id,
-                    f"▶️ Task #{task.id} in esecuzione...\n_{task.instruction[:80]}_",
-                    parse_mode="Markdown",
-                )
-
                 if not await workspace.setup(cfg):
                     await bot.send_message(chat_id, "❌ Errore workspace. Controlla il GitHub token.")
                     task.status = TaskStatus.DONE
                     continue
 
                 await workspace.pull(cfg)
-                await history.compact_if_needed(chat_id, cfg)
 
                 heartbeat = asyncio.create_task(
                     _heartbeat(chat_id, task, bot, cfg.heartbeat_interval)
                 )
                 try:
-                    result = await executor.run(task.instruction, chat_id, cfg)
+                    result = await executor.run(task.instruction, cfg)
                 finally:
                     heartbeat.cancel()
                     try:
@@ -133,15 +126,9 @@ async def _worker(chat_id: int, bot, cfg: Config) -> None:
                         pass
 
                 task.status = TaskStatus.DONE
-                history.add(chat_id, "user", task.instruction)
-                history.add(chat_id, "assistant", result)
 
                 display = result[:3800] + "\n\n... _(output troncato)_" if len(result) > 3800 else result
-                await bot.send_message(
-                    chat_id,
-                    f"✅ *Task #{task.id} completato!*\n\n{display}",
-                    parse_mode="Markdown",
-                )
+                await bot.send_message(chat_id, display, parse_mode="Markdown")
 
             except asyncio.CancelledError:
                 task.status = TaskStatus.CANCELLED

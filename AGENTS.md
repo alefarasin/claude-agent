@@ -4,7 +4,7 @@ This file provides context to AI agents (including Claude Code) operating inside
 
 ## Project overview
 
-Claude Agent is a Telegram bot that receives natural language instructions and executes them autonomously on a target GitHub repository using the Claude Code CLI. The bot manages a per-chat task queue, maintains conversation history with automatic compaction, and runs entirely inside Docker.
+Claude Agent is a Telegram bot that receives natural language instructions and executes them autonomously on a target GitHub repository using the Claude Code CLI. The bot manages a per-chat task queue and maintains conversation context via a persistent file, running entirely inside Docker.
 
 ## Repository structure
 
@@ -13,12 +13,11 @@ claude-agent/
 ├── bot.py                  # Entry point: builds Application, registers handlers
 ├── config.py               # Config dataclass — all env vars validated at startup
 ├── agent/
-│   ├── executor.py         # run_raw(), run() — Claude subprocess execution
-│   ├── history.py          # Conversation history store + compaction
-│   ├── queue.py            # AgentTask, chat_worker, heartbeat, enqueue/cancel/remove
+│   ├── executor.py         # run(), run_raw(), context file management
+│   ├── queue.py            # AgentTask, _worker, heartbeat, enqueue/cancel/remove
 │   └── workspace.py        # setup(), pull() — async git workspace management
 ├── handlers/
-│   ├── commands.py         # /start /status /log /tasks /cancel /reset /help
+│   ├── commands.py         # /start /status /log /tasks /cancel /compact /reset /help
 │   └── messages.py         # handle() — incoming text messages
 ├── pyproject.toml          # Poetry dependencies and scripts
 ├── poetry.lock             # Locked dependency tree (always committed)
@@ -41,10 +40,10 @@ handlers/messages.py — handle()
 agent/queue._worker()  ── asyncio background task, one per active chat
      │
      ├── agent/workspace.setup()     async clone / pull GitHub repo into ~/workspace/<REPO_NAME>
-     ├── agent/history.compact_if_needed()   summarise old turns via claude --print
      ├── agent/queue._heartbeat()    sends "still running" every 60s
      └── agent/executor.run()
-              │  prepends conversation context to instruction
+              │  reads context.md, prepends it to instruction, calls run_raw()
+              │  appends instruction + response to context.md
               └── agent/executor.run_raw()
                        └── subprocess: claude --print --dangerously-skip-permissions
 ```
@@ -52,7 +51,7 @@ agent/queue._worker()  ── asyncio background task, one per active chat
 Key design decisions:
 - **No hard timeout** on tasks — long-running operations are supported; use `/cancel` to abort.
 - **Sequential execution per chat** — tasks from the same chat run one at a time to avoid workspace race conditions.
-- **In-memory state** — history and task queue are not persisted; a container restart clears them.
+- **File-based conversation context** — `executor.py` maintains `context.md` in the workspace volume (at `~/workspace/context.md`, outside the repo). The file survives container restarts and is prepended to every Claude invocation. `/compact` asks Claude to condense it; `/reset` deletes it.
 - **Config injected via `bot_data`** — `context.bot_data["cfg"]` carries the `Config` instance into every handler, avoiding global state.
 - **All git operations are async** — `workspace.setup()` and `workspace.pull()` use `asyncio.create_subprocess_exec` to avoid blocking the PTB polling event loop.
 - **Non-root user with sudo** — the container runs as user `claude` (required for `--dangerously-skip-permissions`) with passwordless `sudo`, allowing Claude Code to install system packages during task execution.
@@ -117,7 +116,8 @@ poetry update              # update all
 | `/tasks` | `commands.tasks` | Running task (elapsed time) + pending queue |
 | `/cancel` | `commands.cancel` | Cancel running task and clear the entire queue |
 | `/cancel <id>` | `commands.cancel` | Remove a specific pending task by ID |
-| `/reset` | `commands.reset` | Clear conversation history |
+| `/compact` | `commands.compact_cmd` | Ask Claude to condense the conversation context |
+| `/reset` | `commands.reset` | Delete context.md and start a new session |
 | `/help` | `commands.help_cmd` | Usage guide |
 
 ## Agent guidelines
@@ -131,11 +131,19 @@ When Claude Code operates inside this repository via the bot:
 - **Run tests if present** before committing. If no test suite exists, verify the change manually where possible.
 - **Keep commits atomic** — one logical change per commit.
 
-## History and compaction
+## Conversation context
 
-Conversation history is stored in `agent/history._store: dict[int, list[dict]]` keyed by `chat_id`. Each entry has `role` (`user`, `assistant`, or `system`) and `content`.
+Conversation context is stored in `~/workspace/context.md` (on the persistent Docker volume, outside the git repo). Each completed task appends:
 
-When `len(history) > cfg.max_history_len` (default 20), `compact_if_needed()` summarises the oldest messages via `executor.run_raw()` and replaces them with a single `system` summary. The most recent `cfg.history_keep_recent` (default 6) messages are always kept verbatim.
+```markdown
+### User
+<instruction>
+
+### Claude
+<response>
+```
+
+`executor.run()` reads this file and prepends it to every Claude invocation so the model has full session context. The file grows indefinitely until the user runs `/compact` (which rewrites it as a condensed summary via Claude) or `/reset` (which deletes it).
 
 ## Task lifecycle
 

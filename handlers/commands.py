@@ -5,7 +5,6 @@ from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 from agent import queue as q
-from agent import history
 
 
 def authorized(update: Update, allowed_chat_id: int) -> bool:
@@ -25,7 +24,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/tasks — task in coda o in esecuzione\n"
         "/cancel — annulla il task corrente e svuota la coda\n"
         "/cancel <id> — rimuove un task specifico dalla coda\n"
-        "/reset — resetta la sessione corrente\n"
+        "/compact — compatta il contesto della sessione\n"
+        "/reset — azzera il contesto e inizia una nuova sessione\n"
         "/help — guida rapida"
     )
 
@@ -108,8 +108,22 @@ async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     cfg = context.bot_data["cfg"]
     if not authorized(update, cfg.allowed_chat_id):
         return
-    history.clear(update.effective_chat.id)
+    from agent import executor
+    executor.reset_context(cfg)
     await update.message.reply_text("🔄 Sessione resettata. Puoi iniziare un nuovo argomento.")
+
+
+async def compact_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    cfg = context.bot_data["cfg"]
+    if not authorized(update, cfg.allowed_chat_id):
+        return
+    from agent import executor
+    if not executor.read_context(cfg):
+        await update.message.reply_text("Nessun contesto da compattare.")
+        return
+    await update.message.reply_text("🗜️ Compattazione in corso...")
+    await executor.compact_context(cfg)
+    await update.message.reply_text("✅ Contesto compattato.")
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -127,6 +141,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/tasks — vedi cosa è in coda\n"
         "/cancel — annulla il task corrente e svuota la coda\n"
         "/cancel <id> — rimuove un task specifico dalla coda\n"
-        "/reset — nuova sessione su argomento diverso",
+        "/compact — chiede a Claude di condensare il contesto accumulato\n"
+        "/reset — azzera il contesto e inizia una nuova sessione",
         parse_mode="Markdown",
     )
