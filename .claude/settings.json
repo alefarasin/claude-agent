@@ -3,7 +3,8 @@
     "allow": [
       "Bash(poetry --version)",
       "Bash(which poetry *)",
-      "Read(//home/explo/.local/share/pypoetry/venv/bin/**)"
+      "Read(//home/explo/.local/share/pypoetry/venv/bin/**)",
+      "Bash(git -C /home/explo/claude-agent log --oneline -3)"
     ]
   }
 }

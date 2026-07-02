@@ -19,6 +19,9 @@ if [ -z "${CLAUDE_CODE_OAUTH_TOKEN}" ]; then
     exit 1
 fi
 
+# Assicura che il volume workspace sia scrivibile dall'utente corrente
+sudo chown claude:claude /home/claude/workspace 2>/dev/null || true
+
 echo "✅ Configurazione completata"
 echo "🤖 Avvio bot Telegram..."
 

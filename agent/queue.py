@@ -60,6 +60,23 @@ def cancel_all(chat_id: int) -> bool:
     return True
 
 
+def remove_task(chat_id: int, task_id: int) -> str:
+    """Remove a task by ID. Returns 'running', 'removed', or 'not_found'."""
+    running = running_tasks.get(chat_id)
+    if running and running.id == task_id:
+        w = worker_tasks.get(chat_id)
+        if w and not w.done():
+            task_queues[chat_id] = []
+            w.cancel()
+            return "running"
+    queue = task_queues.get(chat_id, [])
+    for i, task in enumerate(queue):
+        if task.id == task_id:
+            queue.pop(i)
+            return "removed"
+    return "not_found"
+
+
 def queue_status(chat_id: int) -> tuple[AgentTask | None, list[AgentTask]]:
     return running_tasks.get(chat_id), task_queues.get(chat_id, [])
 
@@ -95,12 +112,12 @@ async def _worker(chat_id: int, bot, cfg: Config) -> None:
                     parse_mode="Markdown",
                 )
 
-                if not workspace.setup(cfg):
+                if not await workspace.setup(cfg):
                     await bot.send_message(chat_id, "❌ Errore workspace. Controlla il GitHub token.")
                     task.status = TaskStatus.DONE
                     continue
 
-                workspace.pull(cfg)
+                await workspace.pull(cfg)
                 await history.compact_if_needed(chat_id, cfg)
 
                 heartbeat = asyncio.create_task(

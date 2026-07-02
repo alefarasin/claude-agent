@@ -15,8 +15,8 @@ claude-agent/
 ├── agent/
 │   ├── executor.py         # run_raw(), run() — Claude subprocess execution
 │   ├── history.py          # Conversation history store + compaction
-│   ├── queue.py            # AgentTask, chat_worker, heartbeat, enqueue/cancel
-│   └── workspace.py        # setup(), pull() — git workspace management
+│   ├── queue.py            # AgentTask, chat_worker, heartbeat, enqueue/cancel/remove
+│   └── workspace.py        # setup(), pull() — async git workspace management
 ├── handlers/
 │   ├── commands.py         # /start /status /log /tasks /cancel /reset /help
 │   └── messages.py         # handle() — incoming text messages
@@ -40,7 +40,7 @@ handlers/messages.py — handle()
      ▼
 agent/queue._worker()  ── asyncio background task, one per active chat
      │
-     ├── agent/workspace.setup()     clone / pull GitHub repo into ~/workspace/<REPO_NAME>
+     ├── agent/workspace.setup()     async clone / pull GitHub repo into ~/workspace/<REPO_NAME>
      ├── agent/history.compact_if_needed()   summarise old turns via claude --print
      ├── agent/queue._heartbeat()    sends "still running" every 60s
      └── agent/executor.run()
@@ -54,8 +54,22 @@ Key design decisions:
 - **Sequential execution per chat** — tasks from the same chat run one at a time to avoid workspace race conditions.
 - **In-memory state** — history and task queue are not persisted; a container restart clears them.
 - **Config injected via `bot_data`** — `context.bot_data["cfg"]` carries the `Config` instance into every handler, avoiding global state.
-- **`gitpython` not used** — all git operations go through `subprocess` directly.
-- **Ollama fallback** — when `OLLAMA_FALLBACK=true` and Claude exits with a non-zero code, `executor.run_raw()` retries via the Ollama HTTP API (`/api/chat`). Ollama runs as a sidecar container (`ollama/ollama`) with GPU passthrough.
+- **All git operations are async** — `workspace.setup()` and `workspace.pull()` use `asyncio.create_subprocess_exec` to avoid blocking the PTB polling event loop.
+- **Non-root user with sudo** — the container runs as user `claude` (required for `--dangerously-skip-permissions`) with passwordless `sudo`, allowing Claude Code to install system packages during task execution.
+- **GPU passthrough** — if an NVIDIA GPU is present, it is forwarded to the container via `deploy.resources.reservations.devices` (`count: all`); the container starts normally on machines without a GPU.
+
+## Container environment
+
+The following toolchains are pre-installed in the image:
+
+| Language | Tools |
+|---|---|
+| C / C++ | `gcc`, `g++`, `clang`, `lld`, `cmake`, `gdb`, `libssl-dev`, `pkg-config` |
+| Rust | `rustc`, `cargo`, `rustfmt` |
+| Python | system Python 3 + Poetry |
+| Node.js | Node 20 (required by Claude Code CLI) |
+
+Additional packages can be installed at runtime with `sudo apt install <package>`.
 
 ## Environment variables
 
@@ -67,9 +81,6 @@ Key design decisions:
 | `GITHUB_TOKEN` | ✅ | Personal Access Token with `repo` scope |
 | `GITHUB_USERNAME` | ✅ | GitHub username used to clone the repo |
 | `REPO_NAME` | ❌ | Repository to work on (default: `claude-agent`) |
-| `OLLAMA_FALLBACK` | ❌ | Set `true` to fall back to Ollama when Claude fails (default: `false`) |
-| `OLLAMA_MODEL` | ❌ | Ollama model name (default: `qwen2.5-coder:14b`) |
-| `OLLAMA_URL` | ❌ | Ollama API base URL (default: `http://ollama:11434`) |
 
 ## Build and run
 
@@ -104,9 +115,9 @@ poetry update              # update all
 | `/status` | `commands.status` | Git status of the workspace |
 | `/log` | `commands.log` | Last 5 commits |
 | `/tasks` | `commands.tasks` | Running task (elapsed time) + pending queue |
-| `/cancel` | `commands.cancel` | Cancel running task and clear queue |
+| `/cancel` | `commands.cancel` | Cancel running task and clear the entire queue |
+| `/cancel <id>` | `commands.cancel` | Remove a specific pending task by ID |
 | `/reset` | `commands.reset` | Clear conversation history |
-| `/mode` | `commands.mode_cmd` | Show current model; `/mode claude` or `/mode ollama` to switch |
 | `/help` | `commands.help_cmd` | Usage guide |
 
 ## Agent guidelines
@@ -133,7 +144,7 @@ PENDING → RUNNING → DONE
                  ↘ CANCELLED
 ```
 
-Each `AgentTask` is created by `queue.enqueue()` and processed by `queue._worker()`. Cancellation triggers `asyncio.Task.cancel()` on the worker, which propagates `CancelledError` into `executor.run_raw()`, where the claude subprocess is killed via `process.kill()`.
+Each `AgentTask` is created by `queue.enqueue()` and processed by `queue._worker()`. Cancellation via `/cancel` triggers `asyncio.Task.cancel()` on the worker, which propagates `CancelledError` into `executor.run_raw()`, where the claude subprocess is killed via `process.kill()`. `/cancel <id>` calls `queue.remove_task()`, which cancels the worker if the task is running or splices it from the pending list if it is still queued.
 
 ## Constraints
 

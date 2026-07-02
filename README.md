@@ -87,9 +87,9 @@ poetry update
 | `/status` | Current workspace branch and pending changes |
 | `/log` | Last 5 commits |
 | `/tasks` | Show running task (with elapsed time) and pending queue |
-| `/cancel` | Cancel the running task and clear the queue |
+| `/cancel` | Cancel the running task and clear the entire queue |
+| `/cancel <id>` | Remove a specific task from the queue (use the ID shown by `/tasks`) |
 | `/reset` | Clear conversation history and start a new session |
-| `/mode` | Show current model; `/mode claude` or `/mode ollama` to switch |
 | `/help` | Usage guide with examples |
 
 Or send any natural language instruction directly:
@@ -99,7 +99,26 @@ Or send any natural language instruction directly:
 - `Add error handling to utils.py`
 - `Write documentation for all functions`
 
-You can send multiple instructions without waiting — they are queued and run one after another. Use `/tasks` to monitor progress and `/cancel` to abort.
+You can send multiple instructions without waiting — they are queued and run one after another. Use `/tasks` to monitor progress, `/cancel <id>` to drop a specific pending task, or `/cancel` to abort everything.
+
+## Container environment
+
+The container runs as a non-root user (`claude`) with passwordless `sudo`, so Claude Code can install system packages during task execution:
+
+```
+sudo apt install <package>
+```
+
+The following build toolchains are pre-installed:
+
+| Language | Tools |
+|---|---|
+| C / C++ | `gcc`, `g++`, `clang`, `lld`, `cmake`, `gdb`, `libssl-dev` |
+| Rust | `rustc`, `cargo`, `rustfmt` |
+| Python | system Python 3 + Poetry |
+| Node.js | Node 20 (required by Claude Code CLI) |
+
+If an NVIDIA GPU is available, it is automatically passed through to the container via the NVIDIA Container Toolkit.
 
 ## Portability
 
@@ -108,64 +127,6 @@ The container runs identically on:
 - Laptop (Mac / Linux / Windows with Docker Desktop)
 - VPS (Hetzner, DigitalOcean, etc.)
 - Any machine with Docker installed
-
-## Ollama fallback (local LLM)
-
-When Claude Pro tokens are exhausted, the bot can automatically fall back to a local model running via [Ollama](https://ollama.com). The default model is `qwen2.5-coder:14b`, which runs entirely on GPU and requires no internet connection.
-
-### Requirements
-
-- NVIDIA GPU with CUDA drivers for WSL2 (verify with `nvidia-smi`)
-- [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
-
-```bash
-# Install NVIDIA Container Toolkit
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-  sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
-sudo nvidia-ctk runtime configure --runtime=docker
-sudo systemctl restart docker
-```
-
-Verify GPU passthrough works:
-
-```bash
-docker run --rm --gpus all nvidia/cuda:12.0-base-ubuntu22.04 nvidia-smi
-```
-
-> **Troubleshooting:** If `nvidia-smi` is not found inside WSL2, the issue is at the Windows driver level — install the NVIDIA Game Ready or Studio driver (version 515+) on the Windows host. This driver includes WSL2 GPU support automatically; no separate Linux driver installation is needed.
-
-### Enable fallback
-
-1. Start the stack (Ollama starts automatically as a sidecar):
-
-```bash
-docker compose up -d
-```
-
-2. Pull the model inside the Ollama container (one-time, ~8 GB):
-
-```bash
-docker compose exec ollama ollama pull qwen2.5-coder:14b
-```
-
-3. Enable the fallback in `.env`:
-
-```
-OLLAMA_FALLBACK=true
-```
-
-4. Restart the bot:
-
-```bash
-docker compose restart claude-agent
-```
-
-From this point on, if Claude Code exits with an error (e.g. quota exceeded), the instruction is automatically re-sent to Ollama and the reply is tagged with the model name.
-
-> **Note:** Ollama is a plain language model — it can suggest and explain code but cannot autonomously read/write files or run git commands like Claude Code CLI does.
 
 ## Notes for WSL2 users
 
